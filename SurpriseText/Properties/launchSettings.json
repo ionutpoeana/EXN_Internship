@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SurpriseText": {
+      "commandName": "Project",
+      "commandLineArgs": "\"Input\\first.xml\" \"Input\\second.xml\"  \"Input\\third.xml\" \"Input\\fourth.xml\""
+    }
+  }
+}
