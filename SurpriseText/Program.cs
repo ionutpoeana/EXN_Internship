@@ -1,24 +1,20 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Security;
+﻿using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
-using Serilog.Events;
-using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace SurpriseText
 {
     class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
 
             var services = new ServiceCollection();
 
             ConfigureServices(services, args);
 
-            using (ServiceProvider serviceProvider = services.BuildServiceProvider())
+            using (var serviceProvider = services.BuildServiceProvider())
             {
                 var menu = serviceProvider.GetService<Menu>();
                     menu.Run();
@@ -28,18 +24,18 @@ namespace SurpriseText
 
         private static void ConfigureServices(ServiceCollection services, string []files)
         {
-
-            services.AddTransient<Menu>(
+            // TODO: find a way to instantiate logger class for all classes where logging is needed 
+            services.AddTransient(
                 menu => new Menu(files.ToList(), menu.GetService<ILogger<Menu>>()));
 
-            var serilogLogger = new LoggerConfiguration()
+            var serilog = new LoggerConfiguration()
                 .WriteTo.File("menu.log")
                 .CreateLogger();
 
             services.AddLogging(builder =>
             {
                 builder.SetMinimumLevel(LogLevel.Information);
-                builder.AddSerilog(serilogLogger, true);
+                builder.AddSerilog(serilog, true);
             });
         }
     }

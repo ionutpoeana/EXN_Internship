@@ -6,70 +6,62 @@ using System.Text;
 using Contracts;
 using ExtensionMethods;
 using Microsoft.Extensions.Logging;
+using SurpriseText.UnitOfWork;
 using static System.Console;
 
 namespace SurpriseText
 {
     public partial class Menu
     {
-        private IRepository<Vehicle> _repository;
-        private Type _vehicleType;
-        private readonly IList<string> _files;
+
+        private readonly UnitOfWork<Vehicle> _unitOfWork = new UnitOfWork<Vehicle>();
+        private readonly IDictionary<string, Type> _vehicleTypes = new Dictionary<string, Type>();
         private readonly ILogger<Menu> _logger;
-        private readonly IDictionary<string, FileList> _fileOperations;
+        private string _selectedVehicleName;
 
         public Menu(IList<string> files, ILogger<Menu> logger)
         {
-            _files = files;
             _logger = logger;
-            _fileOperations = new Dictionary<string, FileList>();
 
-            var index = FileList.FIRST_FILE;
+            var showroom = new XmlParser<Vehicle>(null);
 
             foreach (var file in files)
             {
-                _fileOperations.Add(file, index);
-                ++index;
+                showroom.ReadFile(file);
+                var vehicleType = showroom.GetType();
+                _vehicleTypes.TryAdd(showroom.GetName(), vehicleType);
+                _unitOfWork.AddRepository(vehicleType, showroom.GetAllVehicles(), file);
             }
         }
         public void Run()
         {
             _logger.LogInformation("Start of application!");
-            var operation = MenuOperations.SELECT_FILE;
+            var operation = MenuOperations.SELECT_VEHICLE_TYPE;
             Vehicle vehicle = null;
 
 
             while (operation != MenuOperations.EXIT)
-            {   
+            {
                 Clear();
                 operation = GetOperation(_menuOperations);
 
                 switch (operation)
                 {
-                    case MenuOperations.SELECT_FILE:
+                    case MenuOperations.SELECT_VEHICLE_TYPE:
                         {
-                            var filepath = SelectFile(_files);
-
-                            _logger.LogInformation($"Selected file {filepath} for parsing!");
-
-                            var showroom = new XmlParser<Vehicle>(_logger);
-                            showroom.ReadFile(filepath);
-                            _repository = new Repository<Vehicle>(showroom.GetAllVehicles(), filepath,
-                                EntityContext<Vehicle>.Instance, _logger);
-                            _vehicleType = showroom.GetType();
+                            _selectedVehicleName = SelectVehicleName(_vehicleTypes.Keys.ToList());
 
                             Clear();
                             WriteLine("File has been successfully selected!");
-                            WriteLine($"You have a showroom full of {_vehicleType.Name}");
+                            WriteLine($"You are in your {_selectedVehicleName} garage");
+                            WriteLine($"You can VIEW, ADD, UPGRADE or SELL any {_selectedVehicleName}!");
                             WriteLine("Press any key to continue!");
                             ReadKey();
                             break;
                         }
                     case MenuOperations.SELECT_VEHICLE:
                         {
-                            if (IsRepositoryNull()) continue;
-
-                            vehicle = SelectVehicle(_repository.GetAll());
+                            vehicle = SelectVehicle(_unitOfWork.Repositories[_selectedVehicleName].GetAll());
                             Clear();
                             WriteLine($"You were the lucky {vehicle.ID}");
                             WriteLine("Press any key to do more operations!\n\n");
@@ -79,9 +71,7 @@ namespace SurpriseText
                         }
                     case MenuOperations.DELETE_VEHICLE:
                         {
-                            if (IsRepositoryNull()) continue;
                             Clear();
-
                             if (vehicle == null)
                             {
                                 WriteLine("You have to select a vehicle in order to delete it!");
@@ -90,7 +80,7 @@ namespace SurpriseText
                                 continue;
                             }
 
-                            _repository.Delete(vehicle);
+                            _unitOfWork.Repositories[_selectedVehicleName].Delete(vehicle);
                             WriteLine($"Vehicle with ID {vehicle.ID} has been deleted!\nPress any key to continue!");
                             ReadKey();
                             vehicle = null;
@@ -99,7 +89,6 @@ namespace SurpriseText
                         }
                     case MenuOperations.UPDATE_VEHICLE:
                         {
-                            if (IsRepositoryNull()) continue;
                             Clear();
                             if (vehicle == null)
                             {
@@ -108,27 +97,27 @@ namespace SurpriseText
                                 ReadKey();
                                 continue;
                             }
-                            Clear();
+
                             var updateVehicle = UpdateVehicle(vehicle);
-                            _repository.Update(updateVehicle);
+                            _unitOfWork.Repositories[_selectedVehicleName].Update(updateVehicle);
                             WriteLine($"Vehicle with ID {vehicle.ID} has been updated!\nPress any key to continue!");
                             ReadKey();
                             break;
                         }
                     case MenuOperations.ADD_VEHICLE:
                         {
-                            if (IsRepositoryNull()) continue;
-                            vehicle = AddVehicle(_vehicleType);
+                            vehicle = AddVehicle(_vehicleTypes[_selectedVehicleName]);
                             Clear();
+
                             if (vehicle != null)
                             {
-                                _repository.Add(vehicle);
+                                _unitOfWork.Repositories[_selectedVehicleName].Add(vehicle);
                                 WriteLine("The vehicle database has been successfully updated!");
                                 WriteLine("Press any key to continue!");
                             }
                             else
                             {
-                                WriteLine($"No new {_vehicleType.Name} has been added!");
+                                WriteLine($" No new {_selectedVehicleName} has been added!");
                             }
 
                             ReadKey();
@@ -136,17 +125,13 @@ namespace SurpriseText
                         }
                     case MenuOperations.SAVE:
                         {
-                            if (IsRepositoryNull()) continue;
-                            _repository.Commit();
                             Clear();
+                            _unitOfWork.Commit();
                             WriteLine("The vehicle database has been successfully updated!");
                             WriteLine("Press any key to continue!");
                             ReadKey();
                             break;
                         }
-                    case MenuOperations.TEST_UNIT_OF_WORK:
-                        TestUnitOfWork(_files);
-                        break;
                     case MenuOperations.EXIT:
                         Clear();
                         break;
@@ -156,77 +141,6 @@ namespace SurpriseText
                 }
             }
             _logger.LogInformation("End of application!");
-        }
-
-        private void TestUnitOfWork(IList<string> files)
-        {
-            var xmlParser = new XmlParser<Vehicle>(_logger);
-            xmlParser.ReadFile(files[0]);
-            var bikeRepository = new Repository<Vehicle>(xmlParser.GetAllVehicles(), files[0],
-                EntityContext<Vehicle>.Instance, _logger);
-            xmlParser.ReadFile(files[1]);
-            var carRepository = new Repository<Vehicle>(xmlParser.GetAllVehicles(), files[1],
-                EntityContext<Vehicle>.Instance, _logger);
-            xmlParser.ReadFile(files[2]);
-            var scooterRepository = new Repository<Vehicle>(xmlParser.GetAllVehicles(), files[2],
-                EntityContext<Vehicle>.Instance, _logger);
-            xmlParser.ReadFile(files[3]);
-            var trainRepository = new Repository<Vehicle>(xmlParser.GetAllVehicles(), files[3],
-                EntityContext<Vehicle>.Instance, _logger);
-
-
-            var repositoryList = new List<IRepository<Vehicle>>
-            {
-                bikeRepository,
-                carRepository,
-                scooterRepository,
-                trainRepository
-            };
-
-            IUnitOfWork unitOfWork = new UnitOfWork<Vehicle>(repositoryList, EntityContext<Vehicle>.Instance, _logger);
-
-            var bike = new Bike
-            {
-                Color = "redish",
-                CreatedOn = DateTime.Today,
-                IsForChildren = true,
-                ModelDescription = "ceva trotineata",
-                Nickname = "trotineta",
-                Price = 100
-            };
-
-            var minId = bikeRepository.GetAll().Min(b => b.ID);
-            bikeRepository.Delete(bikeRepository.Get(v => v.ID == minId));
-            bikeRepository.Add(bike);
-
-
-            var car = new Car
-            {
-                Mileage = 200,
-                Model = "Tesla model S",
-                Price = 22,
-                RegistrationDate = DateTime.Now,
-                Vin = "212312213ew"
-            };
-            carRepository.Add(car);
-
-            minId = carRepository.GetAll().Min(c => c.ID);
-            var carToBeDeleted = carRepository.Get(p => p.ID == minId);
-            carRepository.Delete(carToBeDeleted);
-
-            unitOfWork.Commit();
-        }
-
-        private bool IsRepositoryNull()
-        {
-            if (_repository != null) return false;
-
-            Clear();
-            WriteLine("Please choose a file before doing any other operations!");
-            WriteLine("Press any key to do more operations!");
-            ReadKey();
-            return true;
-
         }
 
         private Vehicle UpdateVehicle(Vehicle vehicle)
@@ -249,8 +163,7 @@ namespace SurpriseText
             {
                 var property = vehicleProperties[i];
 
-                if (property.Name.ToLower() == "id")
-                    continue;
+                if (property.Name.ToLower() == "id") continue;
 
                 Write($"{property.Name}[{property.PropertyType.Name}]:");
 
@@ -297,51 +210,50 @@ namespace SurpriseText
                         }
                         break;
                     case ConsoleKey.Enter:
-                        index = offset;
-                        int i = 0;
-                        var sb = new StringBuilder();
-                        var stdout = GetStdHandle(-11);
-                        for (; i < vehicleProperties.Length; ++i)
                         {
-                            if(vehicleProperties[i].Name.ToLower() == "id")
-                                continue;
-
-                            sb.Length = 0;
-                            try
+                            index = offset;
+                            int i = 0;
+                            var sb = new StringBuilder();
+                            var stdout = GetStdHandle(-11);
+                            for (; i < vehicleProperties.Length; ++i)
                             {
-                                for (int j = leftOffset; j < leftOffset + left[i]; ++j)
+                                if (vehicleProperties[i].Name.ToLower() == "id") continue;
+
+                                sb.Length = 0;
+                                try
                                 {
-                                    var coord = ((i + offset) << 16) | j;
-                                    ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coord, out _);
-                                    SetCursorPosition(i + offset, j);
-                                    sb.Append(ch);
+                                    for (int j = leftOffset; j < leftOffset + left[i]; ++j)
+                                    {
+                                        var coord = ((i + offset) << 16) | j;
+                                        ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coord, out _);
+                                        SetCursorPosition(i + offset, j);
+                                        sb.Append(ch);
+                                    }
+
+                                    var smth = sb.ToString();
+
+                                    vehicleProperties[i].SetValue(vehicle,
+                                        Convert.ChangeType(sb.ToString(), vehicleProperties[i].PropertyType));
                                 }
-
-                                var smth = sb.ToString();
-
-                                vehicleProperties[i].SetValue(vehicle, Convert.ChangeType(sb.ToString(), vehicleProperties[i].PropertyType));
+                                catch (Exception e)
+                                {
+                                    break;
+                                }
                             }
-                            catch (Exception e)
+
+                            if (i == vehicleProperties.Length)
                             {
-                                break;
+                                SetCursorPosition(0, vehicleProperties.Length + offset);
+                                WriteLine("Vehicle is valid!");
+                                WriteLine("Press any key to continue!");
+                                Read();
+                                return vehicle;
                             }
-                        }
-
-                        if (i == vehicleProperties.Length)
-                        {
-                            SetCursorPosition(0, vehicleProperties.Length + offset);
-                            WriteLine("Vehicle is valid!");
-                            WriteLine("Press any key to continue!");
-                            Read();
-                            return vehicle;
-                        }
-                        else
-                        {
                             SetCursorPosition(0, vehicleProperties.Length + offset);
                             WriteLine("Vehicle is not valid. Please introduce valid values for vehicle properties!");
-                        }
 
-                        break;
+                            break;
+                        }
                     case ConsoleKey.Escape:
                         return copyOfVehicle;
 
@@ -371,7 +283,7 @@ namespace SurpriseText
             var index = offset;
 
             var vehicleProperties = vehicleType.GetProperties();
-            var leftOffset = vehicleProperties.Max(p => p.Name.Length + p.PropertyType.Name.Length)+ 3;
+            var leftOffset = vehicleProperties.Max(p => p.Name.Length + p.PropertyType.Name.Length) + 3;
 
             foreach (var property in vehicleProperties)
             {
@@ -418,8 +330,7 @@ namespace SurpriseText
                             var stdout = GetStdHandle(-11);
                             for (; i < vehicleProperties.Length; ++i)
                             {
-                                if (vehicleProperties[i].Name.ToLower() == "id")
-                                    continue;
+                                if (vehicleProperties[i].Name.ToLower() == "id") continue;
 
                                 sb.Length = 0;
                                 try
@@ -459,10 +370,11 @@ namespace SurpriseText
                     case ConsoleKey.Escape:
                         return null;
                     default:
-                        if (char.IsLetterOrDigit(consoleKeyInfo.KeyChar) || consoleKeyInfo.KeyChar == '/')
+                        if (char.IsLetterOrDigit(consoleKeyInfo.KeyChar) || consoleKeyInfo.KeyChar == '/' || consoleKeyInfo.KeyChar == ' ')
                         {
                             left[index - offset]++;
                         }
+
                         break;
                 }
 
@@ -502,10 +414,40 @@ namespace SurpriseText
             return vehicles.FirstOrDefault(v => v.ID == vehicleId);
         }
 
-        private string SelectFile(IList<string> files)
+        private static string SelectVehicleName(IList<string> files)
         {
-            var file = GetOperation(_fileOperations);
-            return _fileOperations.FirstOrDefault(p => p.Value == file).Key;
+            Clear();
+            WriteLine("Showroom");
+            WriteLine("Press ENTER to validate selection.\n");
+            PrintMenu(files);
+
+            var leftOffset = files.Max(o => o.Length) + 1;
+            var key = ConsoleKey.Escape;
+            const int offset = 3;
+            var index = offset;
+            SetCursorPosition(leftOffset, index);
+
+            while (key != ConsoleKey.Enter)
+            {
+                key = ReadKey().Key;
+
+                switch (key)
+                {
+                    case ConsoleKey.DownArrow:
+                        ++index;
+                        if (index >= (files.Count + offset))
+                            --index;
+                        break;
+                    case ConsoleKey.UpArrow:
+                        --index;
+                        if (index < offset)
+                            ++index;
+                        break;
+                }
+                SetCursorPosition(leftOffset, index);
+            }
+
+            return files[index - offset];
         }
 
         private static T GetOperation<T>(IDictionary<string, T> operations)
@@ -546,7 +488,8 @@ namespace SurpriseText
 
         private static void PrintMenu(IList<string> menuItems)
         {
-            if (menuItems == null) throw new ArgumentNullException(nameof(menuItems));
+            if (menuItems == null)
+                throw new ArgumentNullException(nameof(menuItems));
 
             foreach (var item in menuItems)
             {

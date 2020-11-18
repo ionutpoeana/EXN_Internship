@@ -10,6 +10,5 @@ namespace SurpriseText
         void Delete(T entity);
         void Update(T entity);
         void Add(T entity);
-        int Commit();
     }
 }

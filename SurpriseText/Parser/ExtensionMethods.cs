@@ -10,8 +10,7 @@ namespace ExtensionMethods
     {
         public static bool IsTypeOf(this IList<(string Name, string Value)> vehicleProperties, IList<PropertyInfo> propertiesInfos )
         {
-            if (vehicleProperties.Count != propertiesInfos.Count)
-                return false;
+            if (vehicleProperties.Count != propertiesInfos.Count) return false;
 
             var matchedProperties = (
                 from vehicleProp in vehicleProperties 

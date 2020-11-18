@@ -2,77 +2,54 @@
 using System.Collections.Generic;
 using System.Linq;
 using Contracts;
+using SurpriseText.Command;
 
 namespace SurpriseText
 {
-    public class EntityContext<T> where T : Vehicle
+    public class EntityContext<T> where T : Vehicle 
     {
-        private readonly IDictionary<string, IList<(T entity, DmlOperation operation)>> _lastVersion;
+        private readonly IDictionary<string, string> _fileLocation = new Dictionary<string, string>();
+        private readonly Stack<Command<T>> _operationStack = new Stack<Command<T>>();
+        public IDictionary<string, IList<T>> Repositories { get; } = new Dictionary<string, IList<T>>();
 
-        private static EntityContext<T> _entityContextInstance = null;
-
-        public static EntityContext<T> Instance => _entityContextInstance ?? (_entityContextInstance = new EntityContext<T>());
-
-        private EntityContext()
+        public void AddOperation(Command<T> operation)
         {
-            _lastVersion = new Dictionary<string, IList<(T entity, DmlOperation operation)>>();
+            _operationStack.Push(operation);
         }
 
-        public void AddLastVersion(T entity, DmlOperation operation)
+        public void AddRepository(Type entityType, IList<T> entities, string filePath)
         {
-            var nameOfType = entity.GetType().Name;
 
-            if (!_lastVersion.ContainsKey(nameOfType))
-                _lastVersion[nameOfType] = new List<(T, DmlOperation)>();
+            if(Repositories.ContainsKey(entityType.Name)) return;
 
-            var entitiesVersionList = _lastVersion[nameOfType];
+            Repositories.Add(entityType.Name, entities);
+            _fileLocation.Add(entityType.Name, filePath);
+        }
 
-            switch (operation)
+
+        public void SaveChanges()
+        {
+            try
             {
-                case DmlOperation.CREATE:
-                    entitiesVersionList.Add((entity, operation));
-                    break;
-                case DmlOperation.UPDATE:
-                    if (entitiesVersionList.Any(p => p.entity.ID == entity.ID &&
-                                                     p.operation == DmlOperation.CREATE))
-                    {
-                        entitiesVersionList.Remove(entitiesVersionList.FirstOrDefault(p => p.entity.ID == entity.ID));
-                        entitiesVersionList.Add((entity, DmlOperation.CREATE));
-                        break;
-                    }
+                foreach (var (entityName, entities) in Repositories)
+                {
+                    XmlParser<T>.WriteToFile(_fileLocation[entityName],entities);
+                }
 
-                    entitiesVersionList.Add((entity,operation));
-                    break;
-                case DmlOperation.DELETE:
-                    var vehicle = entitiesVersionList.FirstOrDefault(p => p.entity.ID == entity.ID);
-                    if (vehicle == default(ValueTuple<T, DmlOperation>))
-                    {
-                        entitiesVersionList.Add((entity, operation));
-                        break;
-                    }
-
-                    if (vehicle.operation == DmlOperation.CREATE)
-                    {
-                        entitiesVersionList.Remove(vehicle);
-                        break;
-                    }
-
-                    if (vehicle.operation == DmlOperation.UPDATE)
-                        vehicle.operation = operation;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(operation), operation, null);
             }
+            catch (Exception e)
+            {
+                Rollback();
+            }
+           
         }
 
-        public IList<( T entity, DmlOperation operation)> GetLastVersion(Type type)
+        private void Rollback()
         {
-            return _lastVersion.ContainsKey(type.Name) ? _lastVersion[type.Name] : null;
-        }
-
-        public void EraseLastVersion()
-        {
-            _lastVersion.Clear();
+            while (_operationStack.Any())
+            {
+                _operationStack.Pop().Execute();
+            }
         }
     }
 }

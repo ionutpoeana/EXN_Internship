@@ -17,7 +17,6 @@ namespace GameOfLife
         private int _iterations;
         private readonly string TITLE = "The Game of Life";
         private readonly StringBuilder _sb;
-        private int _initialSBOffset;
 
         public Game(int rows, int cols )
         {
@@ -50,21 +49,20 @@ namespace GameOfLife
 
             _isGridChanged = true;
 
-            for (var j = 0; j < (_topPadding - 1) / 2; ++j)
-                _sb.Append('\n');
-
-            _sb.Append(TITLE);
-
-            for (var j = 0; j < (_topPadding - 1) / 2; ++j)
-                _sb.Append('\n');
-
-            _initialSBOffset = _sb.Length;
-
         }
 
 
         private void Run()
         {
+
+            for (var j = 0; j < (_topPadding - 1) / 2; ++j)
+                Write('\n');
+
+            WriteLine(TITLE);
+
+            for (var j = 0; j < (_topPadding - 1) / 2; ++j)
+                Write('\n');
+
             while (_isGridChanged)
             {
                 Draw();
@@ -80,7 +78,7 @@ namespace GameOfLife
 
         private void Draw()
         {
-            _sb.Length = _initialSBOffset;
+            _sb.Length = 0;
 
             for (var i = 0; i < _rows; ++i)
             {
@@ -98,7 +96,7 @@ namespace GameOfLife
             ++_iterations;
             _sb.Append($"\nYour world survived for {_iterations} generations!");
 
-            SetCursorPosition(0,0);
+            SetCursorPosition(0,_topPadding);
             WriteLine(_sb.ToString());
             _previousGrid = _grid;
             _isGridChanged = false;

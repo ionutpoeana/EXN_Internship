@@ -11,11 +11,11 @@ namespace SurpriseText
 {
     public class XmlParser<T> where T : Vehicle
     {
-        private readonly ILogger<Menu> _logger;
+        private readonly ILogger<XmlParser<T>> _logger;
         private readonly IList<T> _entities;
         private readonly IList<Type> _entityTypes;
 
-        public XmlParser(ILogger<Menu> logger)
+        public XmlParser(ILogger<XmlParser<T>> logger)
         {
             _logger = logger;
             _entities = new List<T>();
@@ -28,6 +28,11 @@ namespace SurpriseText
         public new Type GetType()
         {
             return _entities[0].GetType();
+        }
+
+        public string GetName()
+        {
+            return GetType().Name;
         }
 
         private void AddEntity(IList<(string Name, string Value)> vehicleProperties)
@@ -43,11 +48,11 @@ namespace SurpriseText
                 break;
             }
         }
-        private T MapEntity(IList<(string Name, string Value)> entityProperties, Type entityType)
+
+        private static T MapEntity(IList<(string Name, string Value)> entityProperties, Type entityType)
         {
             var classProperties = entityType?.GetProperties();
-            if (classProperties == null)
-                return null;
+            if (classProperties == null) return null;
 
             var vehicle = (T)(Activator.CreateInstance(entityType));
             try
@@ -56,15 +61,15 @@ namespace SurpriseText
                 {
                     var vehicleProperty = entityProperties.FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.CurrentCultureIgnoreCase));
 
-                    if (vehicleProperty.Equals(default(ValueTuple<string, string>)))
-                        return null;
+                    if (vehicleProperty.Equals(default(ValueTuple<string, string>))) return null;
 
                     property.SetValue(vehicle, Convert.ChangeType(vehicleProperty.Value, property.PropertyType));
                 }
             }
             catch (Exception e)
             {
-                _logger.LogCritical(e,$"Exception occurred instance creation of a {entityType} object!");
+                
+                //_logger.LogCritical(e,$"Exception occurred instance creation of a {entityType} object!");
                 return null;
             }
 
@@ -113,23 +118,30 @@ namespace SurpriseText
         {
             var settings = new XmlWriterSettings { Indent = true, IndentChars = "\t" };
 
-            using (var xmlWriter = XmlWriter.Create(filePath, settings))
+            try
             {
-                xmlWriter.WriteStartDocument();
-                xmlWriter.WriteStartElement("ArrayOfSomething");
-
-                foreach (var vehicle in vehicles)
+                using (var xmlWriter = XmlWriter.Create(filePath, settings))
                 {
-                    var vehicleProperties = vehicle.GetType().GetProperties();
-                    xmlWriter.WriteStartElement("Something");
-                    foreach (var property in vehicleProperties)
+                    xmlWriter.WriteStartDocument();
+                    xmlWriter.WriteStartElement("ArrayOfSomething");
+
+                    foreach (var vehicle in vehicles)
                     {
-                        xmlWriter.WriteElementString(property.Name, property.GetValue(vehicle)?.ToString() ?? string.Empty);
+                        var vehicleProperties = vehicle.GetType().GetProperties();
+                        xmlWriter.WriteStartElement("Something");
+                        foreach (var property in vehicleProperties)
+                        {
+                            xmlWriter.WriteElementString(property.Name, property.GetValue(vehicle)?.ToString() ?? string.Empty);
+                        }
+                        xmlWriter.WriteEndElement();
                     }
                     xmlWriter.WriteEndElement();
+                    xmlWriter.WriteEndDocument();
                 }
-                xmlWriter.WriteEndElement();
-                xmlWriter.WriteEndDocument();
+            }
+            catch (Exception e)
+            {
+                throw e;
             }
         }
     }
