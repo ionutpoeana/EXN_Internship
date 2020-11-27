@@ -32,6 +32,8 @@ namespace SurpriseText
                 _vehicleTypes.TryAdd(showroom.GetName(), vehicleType);
                 _unitOfWork.AddRepository(vehicleType, showroom.GetAllVehicles(), file);
             }
+
+            _selectedVehicleName = _vehicleTypes.Keys.First();
         }
         public void Run()
         {
@@ -50,7 +52,7 @@ namespace SurpriseText
                     case MenuOperations.SELECT_VEHICLE_TYPE:
                         {
                             _selectedVehicleName = SelectVehicleName(_vehicleTypes.Keys.ToList());
-
+                            vehicle = null;
                             Clear();
                             WriteLine("File has been successfully selected!");
                             WriteLine($"You are in your {_selectedVehicleName} garage");
@@ -132,10 +134,19 @@ namespace SurpriseText
                             ReadKey();
                             break;
                         }
+                    case MenuOperations.TEST_UNIT_OF_WORK:
+                        {
+                            Clear();
+                            WriteLine("Next time when you call SAVE method an exception will be thrown!");
+                            WriteLine("All the operations will be rolled back util last commit!");
+                            WriteLine("Press any key to continue!");
+                            _unitOfWork.SetContextThrowException();
+                            ReadKey();
+                        }
+                        break;
                     case MenuOperations.EXIT:
                         Clear();
                         break;
-
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -224,13 +235,11 @@ namespace SurpriseText
                                 {
                                     for (int j = leftOffset; j < leftOffset + left[i]; ++j)
                                     {
-                                        var coord = ((i + offset) << 16) | j;
-                                        ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coord, out _);
+                                        var coords = ((i + offset) << 16) | j;
+                                        ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coords, out _);
                                         SetCursorPosition(i + offset, j);
                                         sb.Append(ch);
                                     }
-
-                                    var smth = sb.ToString();
 
                                     vehicleProperties[i].SetValue(vehicle,
                                         Convert.ChangeType(sb.ToString(), vehicleProperties[i].PropertyType));
@@ -337,8 +346,8 @@ namespace SurpriseText
                                 {
                                     for (var j = leftOffset; j < leftOffset + left[i]; ++j)
                                     {
-                                        int coord = ((i + offset) << 16) | j;
-                                        ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coord, out _);
+                                        int coords = ((i + offset) << 16) | j;
+                                        ReadConsoleOutputCharacterW(stdout, out char ch, 1, (uint)coords, out _);
                                         SetCursorPosition(i + offset, j);
                                         sb.Append(ch);
                                     }

@@ -22,14 +22,14 @@ namespace SurpriseText
         public IEnumerable<T> GetAll() => _context.Repositories[_typeName];
 
         public void Delete(T entity)
-        {
+            {
             if (entity == null) return;
 
             var deletedEntity = _context.Repositories[_typeName].FirstOrDefault(p => p.ID == entity.ID);
             if (deletedEntity == null) return;
 
             _context.Repositories[_typeName].Remove(deletedEntity);
-            _context.AddOperation(new AddCommand<T>(_context.Repositories[_typeName],deletedEntity.DeepClone()));
+            _context.AddOperation(new AddCommand<T>(_context.Repositories[_typeName],deletedEntity));
         }
 
         public void Update(T entity)

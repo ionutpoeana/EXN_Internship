@@ -12,6 +12,7 @@ namespace SurpriseText
             DELETE_VEHICLE,
             UPDATE_VEHICLE,
             ADD_VEHICLE,
+            TEST_UNIT_OF_WORK,
             SAVE,
             EXIT = -1
         }
@@ -23,6 +24,7 @@ namespace SurpriseText
             {"Delete Vehicle:", MenuOperations.DELETE_VEHICLE},
             {"Update Vehicle:", MenuOperations.UPDATE_VEHICLE},
             {"Add Vehicle:", MenuOperations.ADD_VEHICLE},
+            {"Test unit of work:", MenuOperations.TEST_UNIT_OF_WORK},
             {"Save:", MenuOperations.SAVE},
             {"Exit:", MenuOperations.EXIT}
         };

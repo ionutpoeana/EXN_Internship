@@ -9,6 +9,11 @@ namespace SurpriseText.UnitOfWork
         private readonly EntityContext<T> _entityContext = new EntityContext<T>();
         public IDictionary<string, IRepository<T>> Repositories { get; } = new Dictionary<string, IRepository<T>>();
 
+        public void SetContextThrowException()
+        {
+            _entityContext.ThrowException();
+        }
+
         public void AddRepository(Type entityType, IList<T> entities, string filePath)
         {
             Repositories.TryAdd(entityType.Name,new Repository<T>(entityType,_entityContext));
