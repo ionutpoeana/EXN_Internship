@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Moca.Tests.TestDtos
+﻿namespace Moca.Tests.TestDtos
 {
     public class ComponentDaysInUse
     {

@@ -16,16 +16,7 @@ namespace Moca
 
             //SeedDatabase(context);
 
-            //Console.WriteLine("Database was seeded successfully!");
-
-            LinqQueries(context);
-
-          
-        }
-
-        private static void LinqQueries(MocaDbContext context)
-        {
-
+            var linqQueries = new MocaLinqQueries(context);
         }
 
         private static void SeedDatabase(MocaDbContext context)

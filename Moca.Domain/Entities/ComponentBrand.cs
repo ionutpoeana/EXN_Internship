@@ -11,7 +11,6 @@ namespace Moca.Domain.Entities
 
         public int ID { get; set; }
         public string Name { get; set; }
-
         public virtual ICollection<ComponentModel> ComponentModels { get; set; }
     }
 }

@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Moca\Moca.csproj" />
+    <ProjectReference Include="..\Moca.Domain\Moca.Domain.csproj" />
   </ItemGroup>
 
 </Project>
