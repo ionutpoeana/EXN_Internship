@@ -5,11 +5,11 @@ using Moca.Tests.TestDtos;
 
 namespace Moca.Domain
 {
-    public class MocaLinqQuerries
+    public class MocaLinqQueries
     {
         private readonly MocaDbContext _context;
 
-        public MocaLinqQuerries(MocaDbContext context)
+        public MocaLinqQueries(MocaDbContext context)
         {
             _context = context;
         }
@@ -28,13 +28,14 @@ namespace Moca.Domain
                             join e2 in _context.Employees on e1.ID! equals e2.ID
                             orderby e1.LastName
                             where e1.RoleId == e2.RoleId &&
-                                  e1.ComponentHistories.Any(ch =>
+                                  e1.ComponentHistories.Any(ch1 =>
                                       e2.ComponentHistories.Any(ch2 =>
-                                          ch2.Component.Model.BrandId == ch.Component.Model.BrandId))
+                                          ch2.Component.Model.BrandId == ch1.Component.Model.BrandId))
                             select
                                 string.Join(' ', e1.FirstName, e1.LastName);
 
             return employees.ToList();
+
         }
 
         /// <summary>
@@ -68,19 +69,18 @@ namespace Moca.Domain
 
         /// <summary>
         /// Get all the employees (Name, Surname and Mail in a column 'EmployeeDetails'), the total cost of
-        /// component requests (both approved and not) in the last years. If no requests were made, Get  0.
+        /// component requests (both approved and not) in the last years.
         /// </summary>
         /// <param name="yearsInPast"> number of years in the past compared to current year</param>
         /// <returns>A list of employees with their component expenses</returns>
         public IList<EmployeeExpenses> GetEmployeesComponentRequests(int yearsInPast)
         {
             var employees = _context.Employees
+                .Where(e => e.ComponentRequests.Any(cr=> cr.Status != 3))
                 .Select(e => new EmployeeExpenses
                 {
                     EmployeeDetails = string.Join(' ', e.FirstName, e.LastName, e.Email),
-                    ComponentExpenses = e.ComponentRequests
-                        .Where(cr => DateTime.Now.Year - cr.RequestDate.Year > yearsInPast)
-                        .Sum(cr => cr.EstimatedPrice)
+                    ComponentExpenses = e.ComponentRequests.Sum(cr => cr.EstimatedPrice)
                 }).OrderBy(e => e.ComponentExpenses);
 
             return employees.ToList();
@@ -112,15 +112,15 @@ namespace Moca.Domain
 
             var employees = _context.Employees
                 .Where(e =>
-                    e.DateOfBirth < DateTime.Now.AddYears(-lowerAgeLimit) &&
-                    e.DateOfBirth > DateTime.Now.AddYears(-higherAgeLimit))
+                    e.DateOfBirth.AddYears(lowerAgeLimit) <= DateTime.Now &&
+                    e.DateOfBirth.AddYears(higherAgeLimit+1) >= DateTime.Now)
                 .Select(e => new EmployeeAge
                 {
                     FirstName = e.FirstName,
                     LastName = e.LastName,
                     Age = DateTime.Now.Year - e.DateOfBirth.Year
                 })
-                .OrderBy(e => e.FirstName.Length)
+                .OrderBy(e => e.Age)
                 .ThenBy(e => e.LastName.Length);
 
             return employees.ToList();
@@ -159,7 +159,7 @@ namespace Moca.Domain
 
 
             var employees = _context.ComponentHistories
-                .Where(ch => ch.StartDate < ch.EndDate.AddMonths(-componentUseTime))
+                .Where(ch => ch.StartDate.AddMonths(componentUseTime) <= ch.EndDate)
                 .Select(ch => new EmployeeAgeAndEmail
                 {
                     LastName = ch.Employee.LastName,
@@ -314,15 +314,15 @@ namespace Moca.Domain
         public IList<ComponentBrand> GetComponentsBrandByUseTime(int lastUseTime)
         {
 
-            var brandAndName = _context.Components
-                .Where(c => c.ComponentHistories.Max(ch =>
-                    ch.EndDate) < DateTime.Now.AddMonths(-lastUseTime))
+            var brandAndName = _context.ComponentHistories
+                .Where(ch => ch.EndDate < DateTime.Now.AddMonths(-lastUseTime))
                 .Select(c => new ComponentBrand
                 {
-                    Name = c.Model.Name,
-                    BrandName = c.Model.Brand.Name
+                    Name = c.Component.Model.Name,
+                    BrandName = c.Component.Model.Brand.Name
                 })
-                .Distinct();
+                .Distinct()
+                .OrderBy(cb => cb.Name);
 
             return brandAndName.ToList();
         }

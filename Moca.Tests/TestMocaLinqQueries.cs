@@ -1,7 +1,7 @@
+using System;
 using Microsoft.Data.SqlClient;
 using Moca.Domain;
 using Xunit;
-using System.Configuration;
 using System.Linq;
 using Dapper;
 using FluentAssertions;
@@ -9,9 +9,10 @@ using Moca.Tests.TestDtos;
 
 namespace Moca.Tests
 {
-    public class TestMocaLinqQueries
+    public class TestMocaLinqQueries : IDisposable
     {
-        private readonly MocaLinqQuerries _mocaLinqQuerries;
+        private readonly MocaLinqQueries _mocaLinqQuerries;
+        private readonly SqlConnection _connection;
 
         private readonly string _connectionString =
             "Data Source=LAPTOP-18\\SQLEXPRESS01;Initial Catalog=Moca;Integrated Security=True;" +
@@ -19,19 +20,18 @@ namespace Moca.Tests
             "ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
         public TestMocaLinqQueries()
         {
-            //TODO: solve connection string storage problem in app.config
-            _mocaLinqQuerries = new MocaLinqQuerries(new MocaDbContext());
+            _mocaLinqQuerries = new MocaLinqQueries(new MocaDbContext());
+            _connection = new SqlConnection(_connectionString);
         }
 
         [Fact]
-        public void Test1()
+        public void Given_Days_In_Use_Of_Components_LINQ_And_SQL_Queries_Results_Should_Be_Equal()
         {
             // Arrange
             const string query = "SELECT ID, DaysInUse FROM ComponentHistories;";
-            using var connection = new SqlConnection(_connectionString);
-            
+
             // Act
-            var sqlComponents = connection.Query<ComponentDaysInUse>(query).ToList();
+            var sqlComponents = _connection.Query<ComponentDaysInUse>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetComponentsDaysInUses();
 
             // Assert
@@ -43,10 +43,9 @@ namespace Moca.Tests
         {
             // Arrange
             const string query = "SELECT Count(dc.ID) FROM DefectiveComponents dc WHERE dc.ReparationStatus = 3; ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<int>(query).SingleOrDefault();
+            var sqlComponents = _connection.Query<int>(query).SingleOrDefault();
             var linqComponents = _mocaLinqQuerries.GetComponentsOutOfUse();
 
             // Assert
@@ -62,17 +61,13 @@ namespace Moca.Tests
                    " inner join ComponentHistories ch ON c.ID = ch.ComponentID" +
                " inner join ComponentTypes ct ON ct.ID = c.TypeID " +
                " GROUP BY C.ID, ct.Name; ";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<ComponentStats>(query).ToList();
+            var sqlComponents = _connection.Query<ComponentStats>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetComponentStats();
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
-
-
-            // TODO: should i return fraction days or full days at average?
         }
 
 
@@ -81,15 +76,14 @@ namespace Moca.Tests
         public void Given_Employees_Number_Which_Are_Using_SubComponents_LINQ_And_SQL_Queries_Results_Should_Be_Equal(int role)
         {
             // Arrange
-            const string query = "SELECT COUNT(*) AS EmployeesNumber"+
+            const string query = "SELECT COUNT(*) AS EmployeesNumber" +
                 " FROM Employees e" +
                     " inner join ComponentHistories ch ON e.ID = ch.EmployeeID" +
                 " inner join Components c ON ch.ComponentID = c.ID" +
                 " WHERE e.RoleID = 3 and c.ParentID is not null and ch.EndDate > GETDATE();";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<int>(query).SingleOrDefault();
+            var sqlComponents = _connection.Query<int>(query).SingleOrDefault();
             var linqComponents = _mocaLinqQuerries.GetNumberOfEmployeesWithSubComponents(role);
 
             // Assert
@@ -102,17 +96,17 @@ namespace Moca.Tests
         public void Given_Component_Brands_In_The_Past_Months_LINQ_And_SQL_Queries_Results_Should_Be_Equivalent(int months)
         {
             // Arrange
-            const string query = "SELECT distinct cm.name, cb.Name as BrandName" +
+            string query = "SELECT distinct cm.name, cb.Name as BrandName" +
                 " FROM ComponentHistories ch" +
                    " inner join Components c ON ch.ComponentID = c.ID" +
                 " inner join ComponentModels cm ON c.ModelID = cm.ID" +
                 " inner join ComponentBrands cb ON cm.BrandID = cb.ID" +
-                " WHERE ch.EndDate < DATEADD(MONTH, -3, GETDATE())" +
+                $" WHERE ch.EndDate < DATEADD(MONTH, {-months}, GETDATE())" +
                 " GROUP BY cm.name, cb.name; ";
-            using var connection = new SqlConnection(_connectionString);
+            
 
             // Act
-            var sqlComponents = connection.Query<ComponentBrand>(query).ToList();
+            var sqlComponents = _connection.Query<ComponentBrand>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetComponentsBrandByUseTime(months);
 
             // Assert
@@ -130,10 +124,9 @@ namespace Moca.Tests
                                          " SELECT 1" +
                                          " FROM Components c1" +
                                          " WHERE c.ID = c1.ParentID )); ";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<int>(query).ToList();
+            var sqlComponents = _connection.Query<int>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetIndependentDefectiveCompNum();
 
             // Assert
@@ -150,36 +143,34 @@ namespace Moca.Tests
                                      " inner join Components c ON cm.ID = c.ModelID " +
                                  " GROUP BY cb.Name " +
                                  " ORDER BY Count desc; ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<ComponentsBrandCount>(query).ToList();
+            var sqlComponents = _connection.Query<ComponentsBrandCount>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetComponentsCountByBrand();
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
-        } 
-        
-        
+        }
+
+
         [Theory]
-        [InlineData("D","a")]
+        [InlineData("D", "a")]
         public void Given_Employees_Name_By_Pattern_LINQ_And_SQL_Queries_Results_Should_Be_Equivalent(string startsWith, string endsWith)
         {
             // Arrange
             string query = "SELECT LastName, FirstName " +
                            " FROM Employees " +
                            $" WHERE LastName like '{startsWith}%' and(LastName like '%{endsWith}' or FirstName like '%{endsWith}'); ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeeFullName>(query).ToList();
-            var linqComponents = _mocaLinqQuerries.GetEmployeesByName(startsWith,endsWith);
+            var sqlComponents = _connection.Query<EmployeeFullName>(query).ToList();
+            var linqComponents = _mocaLinqQuerries.GetEmployeesByName(startsWith, endsWith);
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
-        }  
-        
-        
+        }
+
+
         [Theory]
         [InlineData(1)]
         public void Given_Amount_Spent_On_Components_LINQ_And_SQL_Queries_Results_Should_Be_Equal(int yearsInPast)
@@ -188,10 +179,9 @@ namespace Moca.Tests
             string query = " SELECT SUM(EstimatedPrice) " +
                            " FROM ComponentRequests " +
                            $" WHERE Status = 1 and RequestDate > DATEADD(YEAR, {-yearsInPast}, SYSDATETIME())";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<double>(query).ToList();
+            var sqlComponents = _connection.Query<double>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetComponentExpensesInPast(yearsInPast);
 
             // Assert
@@ -200,7 +190,7 @@ namespace Moca.Tests
 
 
         [Theory]
-        [InlineData(5,8)]
+        [InlineData(5, 8)]
         public void Given_Employees_By_Request_Period_LINQ_And_SQL_Queries_Results_Should_Be_Equal(int startMonth, int endMonth)
         {
             // Arrange
@@ -208,31 +198,27 @@ namespace Moca.Tests
                            " FROM Employees e " +
                            " inner join ComponentRequests cr ON e.ID = cr.EmployeeID " +
                            $" WHERE cr.Status = 1 and Month(cr.RequestDate) between {startMonth} and {endMonth};";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeeNameAndEmail>(query).ToList();
-            var linqComponents = _mocaLinqQuerries.GetEmployeesByRequestPeriod(startMonth,endMonth);
+            var sqlComponents = _connection.Query<EmployeeNameAndEmail>(query).ToList();
+            var linqComponents = _mocaLinqQuerries.GetEmployeesByRequestPeriod(startMonth, endMonth);
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
         }
-        
-        
+
+
         [Fact]
         public void Given_Employees_Emails_By_Role_LINQ_And_SQL_Queries_Results_Should_Be_Equivalent()
         {
-            //TODO: with or without , in emails, or maybe a list
-
             // Arrange
             const string query = "SELECT r.Name as RoleName, '[' + STRING_AGG(e.email, ',') + ']' AS Emails " +
                                  " FROM Roles r " +
                                     " inner join Employees e ON r.ID = e.RoleID " +
                                  " GROUP BY r.Name; ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeesMailByRole>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeesMailByRole>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeesMailByRoles();
 
             // Assert
@@ -247,10 +233,9 @@ namespace Moca.Tests
             string query = $"SELECT top {top} LastName, FirstName, YEAR(GETDATE()) - YEAR(DateOfBirth) AS Age " +
                                  " FROM Employees " +
                                  " ORDER BY  Age, LastName asc; ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeeAge>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeeAge>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetTopEmployeesByAge(top);
 
             // Assert
@@ -265,26 +250,21 @@ namespace Moca.Tests
             string query = "SELECT distinct LastName, (YEAR(GETDATE())- YEAR(e.DateOfBirth)) AS Age, e.Email " +
                                  " FROM Employees e " +
                                     " inner join ComponentHistories ch ON e.ID = ch.EmployeeID" +
-                                 $" WHERE DATEDIFF(MONTH, ch.StartDate, ch.EndDate) >= {monthsUseTime}" +
-                                 " ORDER BY  LastName; ";
-            using var connection = new SqlConnection(_connectionString);
+                                 $" WHERE DATEADD(MONTH, CAST({monthsUseTime} as INT),ch.StartDate) <=ch.EndDate" +
+                                 " ORDER BY LastName; ";
 
-            //TODO: sql returns 12 more elements
             // Act
-            var sqlComponents = connection.Query<EmployeeAgeAndEmail>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeeAgeAndEmail>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeesByComponentUseTime(monthsUseTime);
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
         }
 
-
-
         [Theory]
         [InlineData(10)]
         public void Given_Top_N_Employees_By_Request_Number_LINQ_And_SQL_Queries_Results_Should_Be_Equivalent(int top)
         {
-            //TODO: invalid exception
             // Arrange
             string query = $"SELECT top {top} CONCAT_WS(' ', e.LastName, e.FirstName) AS Employee, " +
                                " (YEAR(SYSDATETIME()) - YEAR(DateOfBirth)) AS Age, " +
@@ -293,10 +273,9 @@ namespace Moca.Tests
                               " inner join ComponentRequests cr ON e.ID = cr.EmployeeID " +
                            " GROUP BY e.FirstName, e.LastName, e.DateOfBirth " +
                            " ORDER BY count(cr.EmployeeID) desc, e.LastName; ";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<EmployeesRequest>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeesRequest>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetTopEmployeesByRequestNumber(top);
 
             // Assert
@@ -321,10 +300,9 @@ namespace Moca.Tests
                                  " WHERE cm1.BrandID = cm2.BrandID                              " +
                                  " GROUP BY e1.RoleID, e1.FirstName, e1.LastName                " +
                                  "     ORDER BY Employee; ";
-            using var connection = new SqlConnection(_connectionString);
-
+            
             // Act
-            var sqlComponents = connection.Query<string>(query).ToList();
+            var sqlComponents = _connection.Query<string>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeesWhichUsedSameBrand();
 
             // Assert
@@ -340,12 +318,11 @@ namespace Moca.Tests
             string query = "SELECT FirstName, LastName, (YEAR(SYSDATETIME())- YEAR(DateOfBirth)) AS Age " +
                            " FROM Employees " +
                            $" WHERE DATEDIFF(YEAR, DateOfBirth, GETDATE()) between {lowerAgeLimit}  and {higherAgeLimit} " +
-                           " ORDER BY  LEN(FirstName), LEN(LastName); ";
-            using var connection = new SqlConnection(_connectionString);
+                           " ORDER BY  Age, LEN(LastName); ";
 
             // Act
-            var sqlComponents = connection.Query<EmployeeAge>(query).ToList();
-            var linqComponents = _mocaLinqQuerries.GetEmployeesBetweenAge(lowerAgeLimit,higherAgeLimit);
+            var sqlComponents = _connection.Query<EmployeeAge>(query).ToList();
+            var linqComponents = _mocaLinqQuerries.GetEmployeesBetweenAge(lowerAgeLimit, higherAgeLimit);
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
@@ -361,10 +338,9 @@ namespace Moca.Tests
                                  " WHERE YEAR(e1.DateOfBirth) = YEAR(e2.DateOfBirth) and " +
                                  " MONTH(e1.DateOfBirth) = MONTH(e2.DateOfBirth)" +
                                  " ORDER BY  Employee;";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<string>(query).ToList();
+            var sqlComponents = _connection.Query<string>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeesByBirthAgeAndMonth();
 
             // Assert
@@ -384,10 +360,9 @@ namespace Moca.Tests
                            $" WHERE cr.Status != 3 and cr.RequestDate > DATEADD(YEAR,{-yearsInPast}, RequestDate)" +
                            " GROUP BY e.ID, e.LastName, e.FirstName, e.Email" +
                            " ORDER BY ComponentExpenses";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeeExpenses>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeeExpenses>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeesComponentRequests(yearsInPast);
 
             // Assert
@@ -403,15 +378,18 @@ namespace Moca.Tests
                                  " FROM Employees " +
                                  " WHERE LastName LIKE '[AEIOU]%[BCDFGHJKLMNPQRSTVWXYZ]' " +
                                  " ORDER BY  DateOfBirth; ";
-            using var connection = new SqlConnection(_connectionString);
 
             // Act
-            var sqlComponents = connection.Query<EmployeeFullName>(query).ToList();
+            var sqlComponents = _connection.Query<EmployeeFullName>(query).ToList();
             var linqComponents = _mocaLinqQuerries.GetEmployeeFullNamesByPattern();
 
             // Assert
             sqlComponents.Should().BeEquivalentTo(linqComponents);
         }
 
-    } 
+        public void Dispose()
+        {
+            _connection.Close();
+        }
+    }
 }

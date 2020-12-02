@@ -1,9 +1,6 @@
-﻿using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Moca.Domain.Entities;
-using Moca.Domain.Properties;
 
-#nullable disable
 
 namespace Moca.Domain
 {
